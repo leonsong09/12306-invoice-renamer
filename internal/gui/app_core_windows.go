@@ -9,12 +9,14 @@ import (
 )
 
 const (
-	appTitle = "12306 发票重命名工具"
+	appTitle = "12306 发票重命名工具 - 作者：leonsong09"
 
 	timerID          = 1
 	uiPollIntervalMs = 100
 
 	logBufferSize = 256
+
+	wmCreateFailed = ^uintptr(0)
 )
 
 const (
@@ -33,6 +35,11 @@ type app struct {
 
 	startInputDir  string
 	startOutputDir string
+	settingsPath   string
+	firstRun       bool
+
+	iconBig   syscall.Handle
+	iconSmall syscall.Handle
 
 	inputEdit    syscall.Handle
 	inputBrowse  syscall.Handle
@@ -60,6 +67,8 @@ func newApp(paths startPaths) *app {
 	return &app{
 		startInputDir:  paths.inputDir,
 		startOutputDir: paths.outputDir,
+		settingsPath:   paths.settingsPath,
+		firstRun:       paths.firstRun,
 	}
 }
 
@@ -101,11 +110,13 @@ func wndProc(hwnd syscall.Handle, msg uint32, wParam, lParam uintptr) uintptr {
 			return defWindowProc(hwnd, msg, wParam, lParam)
 		}
 		if err := a.onCreate(hwnd); err != nil {
+			a.onDestroy()
 			showErrorBox("初始化失败", err.Error())
-			postQuitMessage()
-			return 0
+			return wmCreateFailed
 		}
 		return 0
+	case wmCtlColorBtn, wmCtlColorEdit, wmCtlColorStatic:
+		return handleCtlColor(wParam)
 	case wmCommand:
 		a := getApp(hwnd)
 		if a == nil {
@@ -121,6 +132,10 @@ func wndProc(hwnd syscall.Handle, msg uint32, wParam, lParam uintptr) uintptr {
 		a.onTimer(hwnd)
 		return 0
 	case wmDestroy:
+		a := getApp(hwnd)
+		if a != nil {
+			a.onDestroy()
+		}
 		killTimer(hwnd, timerID)
 		postQuitMessage()
 		return 0
@@ -136,4 +151,3 @@ func getApp(hwnd syscall.Handle) *app {
 	}
 	return (*app)(unsafe.Pointer(ptr))
 }
-

@@ -8,6 +8,10 @@ import (
 	"unsafe"
 )
 
+const (
+	redrawAfterSetFont = 1
+)
+
 func setWindowText(hwnd syscall.Handle, text string) {
 	p, _ := syscall.UTF16PtrFromString(text)
 	procSetWindowTextW.Call(uintptr(hwnd), uintptr(unsafe.Pointer(p)))
@@ -64,7 +68,9 @@ func createControl(class string, text string, style uint32, x, y, w, h int32, pa
 		uintptr(getModuleHandle()),
 		0,
 	)
-	return syscall.Handle(hwnd)
+	ctrl := syscall.Handle(hwnd)
+	setDefaultGuiFont(ctrl)
+	return ctrl
 }
 
 func createStatic(parent syscall.Handle, text string, x, y, w, h int32) syscall.Handle {
@@ -104,3 +110,44 @@ func loword(v uintptr) int {
 	return int(uint16(v & 0xFFFF))
 }
 
+func setDefaultGuiFont(hwnd syscall.Handle) {
+	if hwnd == 0 {
+		return
+	}
+	font := getStockObject(stockDefaultGuiFont)
+	if font == 0 {
+		return
+	}
+	sendMessage(hwnd, wmSetFont, font, redrawAfterSetFont)
+}
+
+func getStockObject(id int32) uintptr {
+	r1, _, _ := procGetStockObject.Call(uintptr(id))
+	return r1
+}
+
+func handleCtlColor(hdc uintptr) uintptr {
+	bg := getSysColor(colorWindow)
+	fg := getSysColor(colorWindowText)
+	setBkColor(hdc, bg)
+	setTextColor(hdc, fg)
+	return uintptr(getSysColorBrush(colorWindow))
+}
+
+func getSysColor(index int32) uint32 {
+	r1, _, _ := procGetSysColor.Call(uintptr(index))
+	return uint32(r1)
+}
+
+func getSysColorBrush(index int32) syscall.Handle {
+	r1, _, _ := procGetSysColorBrush.Call(uintptr(index))
+	return syscall.Handle(r1)
+}
+
+func setBkColor(hdc uintptr, color uint32) {
+	procSetBkColor.Call(hdc, uintptr(color))
+}
+
+func setTextColor(hdc uintptr, color uint32) {
+	procSetTextColor.Call(hdc, uintptr(color))
+}

@@ -10,3 +10,6 @@ Thumbs.db
 Desktop.ini
 
 .ace-tool/
+
+# 运行时设置（exe 同目录生成）
+settings.json

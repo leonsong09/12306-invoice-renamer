@@ -20,6 +20,13 @@ func showInfoBox(title string, msg string) {
 	procMessageBoxW.Call(0, uintptr(unsafe.Pointer(m)), uintptr(unsafe.Pointer(t)), mbOK|mbIconInformation)
 }
 
+func askYesNo(owner syscall.Handle, title string, msg string) bool {
+	t, _ := syscall.UTF16PtrFromString(title)
+	m, _ := syscall.UTF16PtrFromString(msg)
+	r1, _, _ := procMessageBoxW.Call(uintptr(owner), uintptr(unsafe.Pointer(m)), uintptr(unsafe.Pointer(t)), mbYesNo|mbIconQuestion)
+	return r1 == idYes
+}
+
 func coInitialize() error {
 	r1, _, _ := procCoInitializeEx.Call(0, coinitApartmentThreaded)
 	if int32(r1) < 0 {
@@ -55,4 +62,3 @@ func browseForFolder(owner syscall.Handle, title string) (string, bool) {
 	}
 	return syscall.UTF16ToString(pathBuf), true
 }
-

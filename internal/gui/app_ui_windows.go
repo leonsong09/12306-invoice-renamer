@@ -3,6 +3,7 @@
 package gui
 
 import (
+	"TrainTicketsTool/internal/processor"
 	"errors"
 	"fmt"
 	"strings"
@@ -10,25 +11,28 @@ import (
 )
 
 const (
-	uiMargin     int32 = 12
-	uiLabelW     int32 = 80
-	uiEditW      int32 = 560
-	uiBrowseW    int32 = 110
-	uiRowH       int32 = 26
-	uiRowGap     int32 = 10
-	uiWindowH    int32 = 520
-	uiLogH       int32 = 360
-	uiTopStartY  int32 = 14
-	uiGapSmall   int32 = 8
-	uiRadioW     int32 = 220
-	uiRadioGap   int32 = 240
-	uiStartBtnW  int32 = 120
-	uiLogLabelY  int32 = 4
+	uiMargin    int32 = 12
+	uiLabelW    int32 = 80
+	uiEditW     int32 = 560
+	uiBrowseW   int32 = 110
+	uiRowH      int32 = 26
+	uiRowGap    int32 = 10
+	uiWindowH   int32 = 520
+	uiLogH      int32 = 360
+	uiTopStartY int32 = 14
+	uiGapSmall  int32 = 8
+	uiRadioW    int32 = 220
+	uiRadioGap  int32 = 240
+	uiStartBtnW int32 = 120
+	uiLogLabelY int32 = 4
 )
 
 var uiWindowW int32 = uiMargin + uiLabelW + uiGapSmall + uiEditW + uiGapSmall + uiBrowseW + uiMargin
 
 func (a *app) onCreate(hwnd syscall.Handle) error {
+	if err := a.initIcons(hwnd); err != nil {
+		return err
+	}
 	setFixedWindowSize(hwnd, uiWindowW, uiWindowH)
 
 	y := uiTopStartY
@@ -39,6 +43,9 @@ func (a *app) onCreate(hwnd syscall.Handle) error {
 	a.createLogArea(hwnd, y)
 
 	a.applyInitialPaths()
+	if err := a.handleFirstRun(hwnd); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -80,21 +87,6 @@ func (a *app) applyInitialPaths() {
 	if strings.TrimSpace(a.startOutputDir) != "" {
 		setWindowText(a.outputEdit, a.startOutputDir)
 	}
-
-	if strings.TrimSpace(a.startInputDir) != "" && strings.TrimSpace(a.startOutputDir) != "" {
-		return
-	}
-
-	wd, err := osGetwd()
-	if err != nil || wd == "" {
-		return
-	}
-	if strings.TrimSpace(a.startInputDir) == "" {
-		setWindowText(a.inputEdit, wd)
-	}
-	if strings.TrimSpace(a.startOutputDir) == "" {
-		setWindowText(a.outputEdit, wd)
-	}
 }
 
 func (a *app) onCommand(hwnd syscall.Handle, wParam uintptr) {
@@ -102,10 +94,12 @@ func (a *app) onCommand(hwnd syscall.Handle, wParam uintptr) {
 	case idInputBrowse:
 		if dir, ok := browseForFolder(hwnd, "选择发票所在文件夹"); ok {
 			setWindowText(a.inputEdit, dir)
+			a.trySaveSettingsFromEdits(hwnd)
 		}
 	case idOutputBrowse:
 		if dir, ok := browseForFolder(hwnd, "选择输出文件夹"); ok {
 			setWindowText(a.outputEdit, dir)
+			a.trySaveSettingsFromEdits(hwnd)
 		}
 	case idStartButton:
 		a.startProcessing(hwnd)
@@ -119,22 +113,15 @@ func (a *app) startProcessing(hwnd syscall.Handle) {
 		return
 	}
 
-	inputDir, err := getWindowText(a.inputEdit)
+	cfg, err := a.buildConfigFromEdits()
 	if err != nil {
-		showErrorBox("读取输入目录失败", err.Error())
 		return
 	}
-	outputDir, err := getWindowText(a.outputEdit)
-	if err != nil {
-		showErrorBox("读取输出目录失败", err.Error())
+	if err := a.ensureDirsForRun(hwnd, cfg); err != nil {
+		showErrorBox("目录错误", err.Error())
 		return
 	}
-
-	cfg, err := buildConfig(inputDir, outputDir, isChecked(a.dateTravel))
-	if err != nil {
-		showErrorBox("参数错误", err.Error())
-		return
-	}
+	a.saveSettingsFromConfig(cfg)
 
 	clearLog(a.logEdit)
 	disableControls(a, true)
@@ -183,3 +170,72 @@ func validateRequiredText(value string, field string) error {
 	return nil
 }
 
+func (a *app) handleFirstRun(hwnd syscall.Handle) error {
+	if !a.firstRun {
+		return nil
+	}
+	a.firstRun = false
+
+	if err := promptCreateMissingDefaultDirs(hwnd, a.startInputDir, a.startOutputDir); err != nil {
+		return err
+	}
+	if err := saveSettingsAtomic(a.settingsPath, settingsV1{InputDir: a.startInputDir, OutputDir: a.startOutputDir}); err != nil {
+		showErrorBox("保存设置失败", err.Error())
+	}
+	return nil
+}
+
+func (a *app) buildConfigFromEdits() (processor.Config, error) {
+	inputDir, err := getWindowText(a.inputEdit)
+	if err != nil {
+		showErrorBox("读取输入目录失败", err.Error())
+		return processor.Config{}, err
+	}
+	outputDir, err := getWindowText(a.outputEdit)
+	if err != nil {
+		showErrorBox("读取输出目录失败", err.Error())
+		return processor.Config{}, err
+	}
+	cfg, err := buildConfig(inputDir, outputDir, isChecked(a.dateTravel))
+	if err != nil {
+		showErrorBox("参数错误", err.Error())
+		return processor.Config{}, err
+	}
+	return cfg, nil
+}
+
+func (a *app) ensureDirsForRun(hwnd syscall.Handle, cfg processor.Config) error {
+	if err := ensureDirExistsOrPromptCreate(hwnd, "输入目录", cfg.InputDir); err != nil {
+		return err
+	}
+	return ensureDirExistsOrPromptCreate(hwnd, "输出目录", cfg.OutputDir)
+}
+
+func (a *app) saveSettingsFromConfig(cfg processor.Config) {
+	if err := saveSettingsAtomic(a.settingsPath, settingsV1{InputDir: cfg.InputDir, OutputDir: cfg.OutputDir}); err != nil {
+		showErrorBox("保存设置失败", err.Error())
+	}
+}
+
+func (a *app) trySaveSettingsFromEdits(hwnd syscall.Handle) {
+	inputDir, err := getWindowText(a.inputEdit)
+	if err != nil {
+		showErrorBox("读取输入目录失败", err.Error())
+		return
+	}
+	outputDir, err := getWindowText(a.outputEdit)
+	if err != nil {
+		showErrorBox("读取输出目录失败", err.Error())
+		return
+	}
+	if strings.TrimSpace(inputDir) == "" || strings.TrimSpace(outputDir) == "" {
+		return
+	}
+
+	cfg, err := buildConfig(inputDir, outputDir, isChecked(a.dateTravel))
+	if err != nil {
+		showErrorBox("参数错误", err.Error())
+		return
+	}
+	a.saveSettingsFromConfig(cfg)
+}

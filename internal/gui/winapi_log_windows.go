@@ -3,7 +3,6 @@
 package gui
 
 import (
-	"os"
 	"syscall"
 	"unsafe"
 )
@@ -58,8 +57,3 @@ func setFixedWindowSize(hwnd syscall.Handle, w int32, h int32) {
 	y := r.top
 	procMoveWindow.Call(uintptr(hwnd), uintptr(x), uintptr(y), uintptr(w), uintptr(h), 1)
 }
-
-func osGetwd() (string, error) {
-	return os.Getwd()
-}
-
