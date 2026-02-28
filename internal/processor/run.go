@@ -49,10 +49,11 @@ func Run(cfg Config, logLine func(string)) (Summary, error) {
 
 	sum := Summary{}
 	r := runner{
-		cfg:           normalizedCfg,
-		logLine: logLine,
-		sum:     &sum,
-		skipDir: skipOutputDir,
+		cfg:          normalizedCfg,
+		logLine:      logLine,
+		sum:          &sum,
+		skipDir:      skipOutputDir,
+		seenPDFNames: make(map[string]struct{}),
 	}
 	if err := r.walk(); err != nil {
 		return sum, err
@@ -61,10 +62,11 @@ func Run(cfg Config, logLine func(string)) (Summary, error) {
 }
 
 type runner struct {
-	cfg     Config
-	logLine func(string)
-	sum     *Summary
-	skipDir string
+	cfg          Config
+	logLine      func(string)
+	sum          *Summary
+	skipDir      string
+	seenPDFNames map[string]struct{}
 }
 
 func (r *runner) walk() error {
@@ -88,6 +90,11 @@ func (r *runner) onWalk(path string, d fs.DirEntry, walkErr error) error {
 
 	switch strings.ToLower(filepath.Ext(path)) {
 	case pdfExt:
+		key := pdfDedupKeyFromFilePath(path)
+		if !r.shouldProcessPDFByKey(key) {
+			r.logSkipDuplicatePDF(path)
+			return nil
+		}
 		r.sum.FoundPDF++
 		if err := r.processPDFFile(path); err != nil {
 			r.logLine(fmt.Sprintf("ERR: %s: %v", path, err))
@@ -180,6 +187,12 @@ func (r *runner) processZipReader(ctxPath string, zr *zip.Reader) error {
 func (r *runner) processZipEntry(ctxPath string, entry *zip.File) error {
 	switch strings.ToLower(filepath.Ext(entry.Name)) {
 	case pdfExt:
+		key := pdfDedupKeyFromZipEntryName(entry.Name)
+		if !r.shouldProcessPDFByKey(key) {
+			source := fmt.Sprintf("%s!%s", ctxPath, entry.Name)
+			r.logSkipDuplicatePDF(source)
+			return nil
+		}
 		r.sum.FoundPDF++
 		if err := r.processZipPDFEntry(ctxPath, entry); err != nil {
 			return err
