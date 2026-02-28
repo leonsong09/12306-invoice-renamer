@@ -1,0 +1,11 @@
+dist/
+
+# 12306 发票/附件（避免误提交到 GitHub）
+*.pdf
+*.ofd
+*.zip
+
+# Windows
+Thumbs.db
+Desktop.ini
+

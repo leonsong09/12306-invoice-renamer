@@ -1,0 +1,162 @@
+//go:build windows
+
+package gui
+
+import (
+	"syscall"
+	"unsafe"
+)
+
+type createStruct struct {
+	lpCreateParams unsafe.Pointer
+	hInstance      syscall.Handle
+	hMenu          syscall.Handle
+	hwndParent     syscall.Handle
+	cy             int32
+	cx             int32
+	y              int32
+	x              int32
+	style          int32
+	lpszName       *uint16
+	lpszClass      *uint16
+	dwExStyle      uint32
+}
+
+type wndClassEx struct {
+	cbSize        uint32
+	style         uint32
+	lpfnWndProc   uintptr
+	cbClsExtra    int32
+	cbWndExtra    int32
+	hInstance     syscall.Handle
+	hIcon         syscall.Handle
+	hCursor       syscall.Handle
+	hbrBackground syscall.Handle
+	lpszMenuName  *uint16
+	lpszClassName *uint16
+	hIconSm       syscall.Handle
+}
+
+type msg struct {
+	hwnd    syscall.Handle
+	message uint32
+	wParam  uintptr
+	lParam  uintptr
+	time    uint32
+	pt      point
+}
+
+type point struct {
+	x, y int32
+}
+
+type rect struct {
+	left, top, right, bottom int32
+}
+
+type browseInfo struct {
+	hwndOwner      syscall.Handle
+	pidlRoot       uintptr
+	pszDisplayName *uint16
+	lpszTitle      *uint16
+	ulFlags        uint32
+	lpfn           uintptr
+	lParam         uintptr
+	iImage         int32
+}
+
+const (
+	wmNCCreate = 0x0081
+	wmCreate   = 0x0001
+	wmCommand  = 0x0111
+	wmTimer    = 0x0113
+	wmDestroy  = 0x0002
+
+	wsOverlapped   = 0x00000000
+	wsCaption      = 0x00C00000
+	wsSysMenu      = 0x00080000
+	wsMinimizeBox  = 0x00020000
+	wsClipChildren = 0x02000000
+	wsVisible      = 0x10000000
+	wsChild        = 0x40000000
+
+	esLeft        = 0x0000
+	esAutoHScroll = 0x0080
+	esMultiLine   = 0x0004
+	esAutoVScroll = 0x0040
+	esReadOnly    = 0x0800
+
+	wsVScroll = 0x00200000
+
+	bsPushButton      = 0x00000000
+	bsAutoRadioButton = 0x00000009
+
+	bmGetCheck = 0x00F0
+	bmSetCheck = 0x00F1
+	bstChecked = 0x0001
+
+	emSetSel      = 0x00B1
+	emReplaceSel  = 0x00C2
+	emScrollCaret = 0x00B7
+
+	swShow = 5
+
+	gwlpUserData = -21
+
+	mbIconError       = 0x00000010
+	mbIconInformation = 0x00000040
+	mbOK              = 0x00000000
+
+	bifReturnOnlyFSDirs = 0x00000001
+	bifNewDialogStyle   = 0x00000040
+	bifEditBox          = 0x00000010
+
+	coinitApartmentThreaded = 0x2
+
+	colorWindow = 5
+	idcArrow    = 32512
+
+	mainWindowStyle = wsOverlapped | wsCaption | wsSysMenu | wsMinimizeBox | wsClipChildren | wsVisible
+)
+
+var (
+	user32   = syscall.NewLazyDLL("user32.dll")
+	kernel32 = syscall.NewLazyDLL("kernel32.dll")
+	shell32  = syscall.NewLazyDLL("shell32.dll")
+	ole32    = syscall.NewLazyDLL("ole32.dll")
+)
+
+var (
+	procRegisterClassExW  = user32.NewProc("RegisterClassExW")
+	procCreateWindowExW   = user32.NewProc("CreateWindowExW")
+	procDefWindowProcW    = user32.NewProc("DefWindowProcW")
+	procShowWindow        = user32.NewProc("ShowWindow")
+	procUpdateWindow      = user32.NewProc("UpdateWindow")
+	procGetMessageW       = user32.NewProc("GetMessageW")
+	procTranslateMessage  = user32.NewProc("TranslateMessage")
+	procDispatchMessageW  = user32.NewProc("DispatchMessageW")
+	procPostQuitMessage   = user32.NewProc("PostQuitMessage")
+	procSetWindowTextW    = user32.NewProc("SetWindowTextW")
+	procGetWindowTextW    = user32.NewProc("GetWindowTextW")
+	procGetWindowTextLenW = user32.NewProc("GetWindowTextLengthW")
+	procSendMessageW      = user32.NewProc("SendMessageW")
+	procEnableWindow      = user32.NewProc("EnableWindow")
+	procSetTimer          = user32.NewProc("SetTimer")
+	procKillTimer         = user32.NewProc("KillTimer")
+	procMessageBoxW       = user32.NewProc("MessageBoxW")
+	procSetWindowLongPtrW = user32.NewProc("SetWindowLongPtrW")
+	procGetWindowLongPtrW = user32.NewProc("GetWindowLongPtrW")
+	procGetWindowRect     = user32.NewProc("GetWindowRect")
+	procMoveWindow        = user32.NewProc("MoveWindow")
+	procLoadCursorW       = user32.NewProc("LoadCursorW")
+
+	procGetModuleHandleW = kernel32.NewProc("GetModuleHandleW")
+
+	procSHBrowseForFolderW   = shell32.NewProc("SHBrowseForFolderW")
+	procSHGetPathFromIDListW = shell32.NewProc("SHGetPathFromIDListW")
+
+	procCoInitializeEx = ole32.NewProc("CoInitializeEx")
+	procCoUninitialize = ole32.NewProc("CoUninitialize")
+	procCoTaskMemFree  = ole32.NewProc("CoTaskMemFree")
+)
+
